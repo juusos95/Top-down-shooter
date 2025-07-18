@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.InputSystem;
 
 public class PlayerAim : MonoBehaviour
@@ -16,9 +17,14 @@ public class PlayerAim : MonoBehaviour
     [SerializeField] Transform shotOrigin;
     [SerializeField] LayerMask enemy;
     [SerializeField] LayerMask environment;
+    [SerializeField] LayerMask collectible;
 
     [SerializeField] LineRenderer line;
     [SerializeField] float shotPower;
+    [SerializeField] float shotTime;
+    float timer;
+
+    [SerializeField] Score score;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -31,6 +37,11 @@ public class PlayerAim : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (timer < shotTime)
+        {
+            timer += Time.deltaTime;
+        }
+
         mousePos = Mouse.current.position.ReadValue();
         /*point = cam.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, 9));
 
@@ -39,11 +50,16 @@ public class PlayerAim : MonoBehaviour
         transform.LookAt(target, Vector3.up);*/
 
         Look();
+        line.SetPosition(0, shotOrigin.position);
     }
 
     void OnFire()
     {
-        Shoot();
+        if (timer > shotTime)
+        {
+            Shoot();
+            timer = 0;
+        }
     }
 
     void Look()
@@ -57,7 +73,7 @@ public class PlayerAim : MonoBehaviour
 
         Vector3 pos = ray.GetPoint(distance);
         direction = pos - transform.position;
-        direction.y = transform.position.y;
+        direction.y = 0;
 
         if (direction != Vector3.zero)
         {
@@ -70,14 +86,21 @@ public class PlayerAim : MonoBehaviour
     {
         Ray ray = new Ray(shotOrigin.position, direction);
 
-        line.SetPosition(0, shotOrigin.position);
-
         if (Physics.Raycast(ray, out RaycastHit hit, 100f))
         {
             line.SetPosition(1, hit.point);
             line.gameObject.SetActive(true);
 
-            hit.rigidbody.AddForce(direction * shotPower);
+            if (hit.collider.gameObject.CompareTag("Collectible"))
+            {
+                score.addPoint();
+                Destroy(hit.collider.gameObject);
+            }
+            else if (hit.collider.gameObject.CompareTag("Enemy"))
+            {
+                hit.rigidbody.AddForce(direction * shotPower);
+                StartCoroutine(gotShot(hit.rigidbody.gameObject, hit.rigidbody));
+            }
         }
         else
         {
@@ -92,5 +115,17 @@ public class PlayerAim : MonoBehaviour
     {
         yield return new WaitForSeconds(0.05f);
         line.gameObject.SetActive(false);
+    }
+    IEnumerator gotShot(GameObject victim, Rigidbody victimRb)
+    {
+        NavMeshAgent agent = victim.GetComponent<NavMeshAgent>();
+        agent.enabled = false;
+
+        yield return new WaitForSeconds(0.5f);
+
+        victimRb.isKinematic = true;
+        victimRb.isKinematic = false;
+
+        agent.enabled = true;
     }
 }
